@@ -10,6 +10,14 @@ export enum TaskStatus {
   DONE = 'done'
 }
 
+export type TaskPriority = 'high' | 'medium' | 'low';
+
+export interface Subtask {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -17,6 +25,8 @@ export interface Task {
   due_date: string; // YYYY-MM-DD
   status: TaskStatus;
   color: 'red' | 'green';
+  priority: TaskPriority;
+  subtasks?: Subtask[];
 }
 
 export type DbAction = 'create' | 'update' | 'delete' | 'query';
@@ -28,6 +38,7 @@ export interface ActionResponse {
   filters?: {
     type?: TaskType;
     status?: TaskStatus;
+    priority?: TaskPriority;
   }; // For query
   error?: string; // Internal use
 }

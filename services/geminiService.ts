@@ -18,9 +18,9 @@ export const processUserCommand = async (
   try {
     const ai = getClient();
     
-    // Prepare context for the model
-    const today = new Date().toISOString().split('T')[0];
-    const taskSummary = currentTasks.map(t => `ID: ${t.id}, Title: "${t.title}"`).join('\n');
+    // Prepare context for the model using local date to ensure "today" is accurate for the user
+    const today = new Date().toLocaleDateString('en-CA');
+    const taskSummary = currentTasks.map(t => `ID: ${t.id}, Title: "${t.title}" [${t.priority}]`).join('\n');
     
     const contextMsg = activeContextType 
       ? `User is currently looking at "${activeContextType}" tasks.` 
@@ -47,9 +47,21 @@ export const processUserCommand = async (
                 id: { type: Type.STRING },
                 title: { type: Type.STRING },
                 type: { type: Type.STRING, enum: ["daily", "weekly", "monthly", "onetime"] },
+                priority: { type: Type.STRING, enum: ["high", "medium", "low"] },
                 due_date: { type: Type.STRING },
                 status: { type: Type.STRING, enum: ["pending", "done"] },
                 color: { type: Type.STRING, enum: ["red", "green"] },
+                subtasks: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      id: { type: Type.STRING },
+                      title: { type: Type.STRING },
+                      isCompleted: { type: Type.BOOLEAN }
+                    }
+                  }
+                }
               }
             },
             task_id: { type: Type.STRING },
@@ -57,7 +69,8 @@ export const processUserCommand = async (
               type: Type.OBJECT,
               properties: {
                 type: { type: Type.STRING, enum: ["daily", "weekly", "monthly", "onetime"] },
-                status: { type: Type.STRING, enum: ["pending", "done"] }
+                status: { type: Type.STRING, enum: ["pending", "done"] },
+                priority: { type: Type.STRING, enum: ["high", "medium", "low"] }
               }
             }
           },

@@ -1,20 +1,85 @@
 import React, { useState, useEffect } from 'react';
-import { Task, TaskType } from './types';
+import { Task, TaskType, TaskStatus, TaskPriority } from './types';
 import { processUserCommand } from './services/geminiService';
 import TaskCard from './components/TaskCard';
 import EmptyState from './components/EmptyState';
 import { TASK_TYPES } from './constants';
 import { Send, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 
+// Helper to get local YYYY-MM-DD string to avoid timezone issues with UTC
+const getLocalISODate = () => {
+  const d = new Date();
+  return d.toLocaleDateString('en-CA'); // Returns YYYY-MM-DD in local time
+};
+
 const App: React.FC = () => {
-  // State
+  // Recurring logic: Reset Daily, Weekly, and Monthly tasks based on current date
+  const checkAndResetRecurringTasks = (currentTasks: Task[]) => {
+    const todayStr = getLocalISODate();
+    const todayDate = new Date();
+    
+    // Calculate Monday of the current week
+    // Day 0 is Sunday, Day 1 is Monday.
+    const currentDay = todayDate.getDay();
+    const diffToMonday = todayDate.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+    const mondayDate = new Date(todayDate);
+    mondayDate.setDate(diffToMonday);
+    const thisWeekMondayStr = mondayDate.toLocaleDateString('en-CA');
+
+    // Calculate 1st of the current month
+    const thisMonthFirstStr = todayStr.substring(0, 8) + '01';
+
+    let hasChanges = false;
+
+    const updated = currentTasks.map(t => {
+      // Ensure priority exists for legacy data
+      const safeTask = { ...t, priority: t.priority || 'medium' };
+
+      let newDueDate = safeTask.due_date;
+      let shouldReset = false;
+
+      if (safeTask.type === TaskType.DAILY) {
+         if (safeTask.due_date < todayStr) {
+           newDueDate = todayStr;
+           shouldReset = true;
+         }
+      } else if (safeTask.type === TaskType.WEEKLY) {
+         if (safeTask.due_date < thisWeekMondayStr) {
+           newDueDate = thisWeekMondayStr;
+           shouldReset = true;
+         }
+      } else if (safeTask.type === TaskType.MONTHLY) {
+         if (safeTask.due_date < thisMonthFirstStr) {
+           newDueDate = thisMonthFirstStr;
+           shouldReset = true;
+         }
+      }
+
+      if (shouldReset) {
+        hasChanges = true;
+        return {
+          ...safeTask,
+          due_date: newDueDate,
+          status: TaskStatus.PENDING,
+          color: 'green',
+          subtasks: safeTask.subtasks?.map(st => ({...st, isCompleted: false}))
+        } as Task;
+      }
+
+      return safeTask;
+    });
+
+    return hasChanges ? updated : updated; // Always return updated to ensure priority defaults
+  };
+
   // Initialize lazily from local storage to ensure data is available on first render
   const [tasks, setTasks] = useState<Task[]>(() => {
     if (typeof window !== 'undefined') {
       try {
         const savedTasks = localStorage.getItem('taskmind_tasks');
         if (savedTasks) {
-          return JSON.parse(savedTasks);
+          const parsed = JSON.parse(savedTasks);
+          return checkAndResetRecurringTasks(parsed);
         }
       } catch (e) {
         console.error("Failed to parse local storage", e);
@@ -32,6 +97,17 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('taskmind_tasks', JSON.stringify(tasks));
   }, [tasks]);
+
+  // Listen for visibility changes (e.g. app left open overnight) to trigger recurring reset
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setTasks(prev => checkAndResetRecurringTasks(prev));
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
 
   const handleCommandSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +130,18 @@ const App: React.FC = () => {
       switch (response.db_action) {
         case 'create':
           if (response.task) {
-            setTasks(prev => [...prev, response.task!]);
+            let newTask = response.task;
+            const today = getLocalISODate();
+            
+            // Force dates based on type for consistency
+            if (newTask.type === TaskType.DAILY) {
+                newTask = { ...newTask, due_date: today, status: TaskStatus.PENDING, color: 'green' };
+            }
+            
+            // Ensure priority is set
+            if (!newTask.priority) newTask.priority = 'medium';
+
+            setTasks(prev => [...prev, newTask]);
           }
           break;
         
@@ -90,7 +177,7 @@ const App: React.FC = () => {
       if (t.id === id) {
         return {
           ...t,
-          status: t.status === 'pending' ? 'done' : 'pending' as any
+          status: t.status === TaskStatus.PENDING ? TaskStatus.DONE : TaskStatus.PENDING
         };
       }
       return t;
@@ -98,7 +185,7 @@ const App: React.FC = () => {
   };
 
   const handleDateChange = (id: string, newDate: string) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalISODate();
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
         return {
@@ -111,8 +198,45 @@ const App: React.FC = () => {
     }));
   };
 
+  const handlePriorityChange = (id: string, newPriority: TaskPriority) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        return { ...t, priority: newPriority };
+      }
+      return t;
+    }));
+  };
+
   const handleDelete = (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleAddSubtask = (taskId: string, title: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        const newSubtask = {
+          id: crypto.randomUUID(),
+          title,
+          isCompleted: false
+        };
+        return { ...t, subtasks: [...(t.subtasks || []), newSubtask] };
+      }
+      return t;
+    }));
+  };
+
+  const handleToggleSubtask = (taskId: string, subtaskId: string) => {
+    setTasks(prev => prev.map(t => {
+      if (t.id === taskId) {
+        return {
+          ...t,
+          subtasks: t.subtasks?.map(st => 
+            st.id === subtaskId ? { ...st, isCompleted: !st.isCompleted } : st
+          )
+        };
+      }
+      return t;
+    }));
   };
 
   // Filter and Sorting Logic
@@ -127,22 +251,30 @@ const App: React.FC = () => {
 
     return true;
   }).sort((a, b) => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalISODate();
     
     // 1. Pending tasks first
-    if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+    if (a.status !== b.status) return a.status === TaskStatus.PENDING ? -1 : 1;
     
     // 2. If both are done, sort by date descending (most recent first)
-    if (a.status === 'done') return b.due_date.localeCompare(a.due_date);
+    if (a.status === TaskStatus.DONE) return b.due_date.localeCompare(a.due_date);
 
     // 3. Logic for Pending tasks:
-    // Check overdue status
+    
+    // Check overdue
     const aOverdue = a.due_date < today;
     const bOverdue = b.due_date < today;
 
-    // Prioritize overdue tasks to the top
     if (aOverdue && !bOverdue) return -1;
     if (!aOverdue && bOverdue) return 1;
+
+    // Check Priority (High > Medium > Low)
+    const priorityWeight: Record<TaskPriority, number> = { high: 3, medium: 2, low: 1 };
+    // Safe check in case priority is undefined (legacy data)
+    const pA = priorityWeight[a.priority || 'medium'];
+    const pB = priorityWeight[b.priority || 'medium'];
+
+    if (pA !== pB) return pB - pA; // Descending weight
 
     // 4. Finally, sort by date ascending (sooner first)
     return a.due_date.localeCompare(b.due_date);
@@ -151,7 +283,7 @@ const App: React.FC = () => {
   const getPlaceholder = () => {
     if (loading) return "Thinking...";
     if (activeFilter?.type) return `Add a ${activeFilter.type} task...`;
-    return "Ask me to 'Add a daily workout task'...";
+    return "Add a task (e.g., 'Urgent buy milk')";
   };
 
   return (
@@ -168,7 +300,7 @@ const App: React.FC = () => {
           </div>
           
           <div className="text-xs font-mono text-slate-500">
-             {tasks.filter(t => t.status === 'pending').length} pending
+             {tasks.filter(t => t.status === TaskStatus.PENDING).length} pending
           </div>
         </div>
       </header>
@@ -246,6 +378,9 @@ const App: React.FC = () => {
                 onToggleStatus={handleToggleStatus}
                 onDelete={handleDelete}
                 onDateChange={handleDateChange}
+                onPriorityChange={handlePriorityChange}
+                onAddSubtask={handleAddSubtask}
+                onToggleSubtask={handleToggleSubtask}
               />
             ))
           ) : (
