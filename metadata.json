@@ -1,0 +1,5 @@
+{
+  "name": "TaskMind AI",
+  "description": "An intelligent task manager powered by Gemini. simple natural language commands to add, update, organize, and query your tasks.",
+  "requestFramePermissions": []
+}
