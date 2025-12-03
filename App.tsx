@@ -5,7 +5,7 @@ import { storageService } from './services/storageService';
 import TaskCard from './components/TaskCard';
 import EmptyState from './components/EmptyState';
 import { TASK_TYPES } from './constants';
-import { Send, Loader2, Sparkles, AlertCircle, Bell, BellOff, RefreshCw, Database } from 'lucide-react';
+import { Send, Loader2, Sparkles, AlertCircle, Bell, BellOff, RefreshCw, Database, RotateCcw } from 'lucide-react';
 
 // Helper to get local YYYY-MM-DD string to avoid timezone issues with UTC
 const getLocalISODate = () => {
@@ -81,6 +81,7 @@ const App: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [sheetConfigured, setSheetConfigured] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
 
   // Check notification permission on mount
   useEffect(() => {
@@ -90,33 +91,42 @@ const App: React.FC = () => {
   }, []);
 
   // INITIAL LOAD FROM GOOGLE SHEETS
-  useEffect(() => {
-    async function initData() {
-      if (!process.env.GOOGLE_SHEET_URL) {
-        setSheetConfigured(false);
-        setErrorMsg("Please set GOOGLE_SHEET_URL in your environment variables.");
-        return;
-      }
+  const initData = async () => {
+    if (!process.env.GOOGLE_SHEET_URL) {
+      setSheetConfigured(false);
+      setErrorMsg("Please set GOOGLE_SHEET_URL in your environment variables.");
+      return;
+    }
 
-      setIsSyncing(true);
+    setConnectionError(false);
+    setIsSyncing(true);
+    
+    try {
       const serverTasks = await storageService.loadTasks();
       
       // Run recurring logic on the fresh data
       const processedTasks = checkAndResetRecurringTasks(serverTasks);
       
       setTasks(processedTasks);
-      setIsHydrated(true);
-      setIsSyncing(false);
+      setIsHydrated(true); // Only hydrate on success!
       checkAndSendNotifications(processedTasks);
+    } catch (err) {
+      console.error("Init Error:", err);
+      setConnectionError(true);
+      setErrorMsg("Failed to connect to Google Sheet. Check your internet or API configuration.");
+    } finally {
+      setIsSyncing(false);
     }
+  };
 
+  useEffect(() => {
     initData();
   }, []);
 
   // SYNC TO GOOGLE SHEETS ON CHANGE
   // Debounce slightly to avoid hammering the sheet on rapid typing/clicking
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated) return; // IMPORTANT: Don't save if we never successfully loaded!
 
     const timeoutId = setTimeout(async () => {
       setIsSyncing(true);
@@ -339,7 +349,7 @@ const App: React.FC = () => {
           
           <div className="flex items-center space-x-4">
              {/* Sync Status Indicator */}
-             {sheetConfigured && (
+             {sheetConfigured && !connectionError && (
                <div className="flex items-center space-x-1.5" title={isSyncing ? "Saving to Google Sheet..." : "Synced with Google Sheet"}>
                   {isSyncing ? (
                     <RefreshCw className="w-3.5 h-3.5 text-blue-400 animate-spin" />
@@ -364,10 +374,17 @@ const App: React.FC = () => {
 
       <main className="max-w-3xl mx-auto px-4 pb-36 pt-6">
         {errorMsg && (
-          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center text-red-400 animate-in fade-in">
-            <AlertCircle className="w-5 h-5 mr-3 flex-shrink-0" />
-            <p className="text-sm">{errorMsg}</p>
-            <button onClick={() => setErrorMsg(null)} className="ml-auto text-xs hover:underline opacity-70">Dismiss</button>
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col sm:flex-row items-center gap-3 text-red-400 animate-in fade-in">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm flex-1">{errorMsg}</p>
+            {connectionError ? (
+               <button onClick={() => initData()} className="px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 rounded text-xs font-semibold flex items-center transition-colors">
+                 <RotateCcw className="w-3 h-3 mr-1.5" />
+                 Retry Connection
+               </button>
+            ) : (
+               <button onClick={() => setErrorMsg(null)} className="text-xs hover:underline opacity-70">Dismiss</button>
+            )}
           </div>
         )}
         
@@ -403,7 +420,7 @@ const App: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          {!isHydrated && sheetConfigured ? (
+          {!isHydrated && sheetConfigured && !connectionError ? (
              <div className="flex justify-center py-20">
                <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
              </div>
