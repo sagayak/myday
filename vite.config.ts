@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      'process.env.GOOGLE_SHEET_URL': JSON.stringify(env.GOOGLE_SHEET_URL),
     },
   };
 });
