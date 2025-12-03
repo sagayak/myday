@@ -55,9 +55,6 @@ const App: React.FC = () => {
         case 'create':
           if (response.task) {
             setTasks(prev => [...prev, response.task!]);
-            
-            // If created task matches current filter, stay. If not, we could switch or just notify.
-            // Current behavior: Stay in current view.
           }
           break;
         
@@ -100,11 +97,25 @@ const App: React.FC = () => {
     }));
   };
 
+  const handleDateChange = (id: string, newDate: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    setTasks(prev => prev.map(t => {
+      if (t.id === id) {
+        return {
+          ...t,
+          due_date: newDate,
+          color: newDate < today ? 'red' : 'green'
+        };
+      }
+      return t;
+    }));
+  };
+
   const handleDelete = (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
   };
 
-  // Filter Logic
+  // Filter and Sorting Logic
   const filteredTasks = tasks.filter(task => {
     if (!activeFilter) return true;
     
@@ -116,8 +127,24 @@ const App: React.FC = () => {
 
     return true;
   }).sort((a, b) => {
-    // Sort by pending first, then by date
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 1. Pending tasks first
     if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+    
+    // 2. If both are done, sort by date descending (most recent first)
+    if (a.status === 'done') return b.due_date.localeCompare(a.due_date);
+
+    // 3. Logic for Pending tasks:
+    // Check overdue status
+    const aOverdue = a.due_date < today;
+    const bOverdue = b.due_date < today;
+
+    // Prioritize overdue tasks to the top
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+
+    // 4. Finally, sort by date ascending (sooner first)
     return a.due_date.localeCompare(b.due_date);
   });
 
@@ -218,6 +245,7 @@ const App: React.FC = () => {
                 task={task} 
                 onToggleStatus={handleToggleStatus}
                 onDelete={handleDelete}
+                onDateChange={handleDateChange}
               />
             ))
           ) : (

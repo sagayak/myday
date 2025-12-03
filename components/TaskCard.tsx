@@ -1,21 +1,26 @@
 import React from 'react';
 import { Task, TaskStatus } from '../types';
-import { CheckCircle2, Circle, Trash2, Calendar, Clock } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Calendar } from 'lucide-react';
 
 interface TaskCardProps {
   task: Task;
   onToggleStatus: (id: string) => void;
   onDelete: (id: string) => void;
+  onDateChange: (id: string, newDate: string) => void;
 }
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleStatus, onDelete }) => {
+const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleStatus, onDelete, onDateChange }) => {
   const isDone = task.status === TaskStatus.DONE;
   
-  // Dynamic border color based on task logic
-  const statusColor = isDone 
+  // Recalculate overdue status dynamically for immediate feedback
+  const today = new Date().toISOString().split('T')[0];
+  const isOverdue = task.due_date < today && !isDone;
+  
+  // Dynamic border and background
+  const statusClasses = isDone 
     ? 'border-slate-700 bg-slate-800/50' 
-    : task.color === 'red' 
-      ? 'border-red-500/50 bg-slate-800' 
+    : isOverdue
+      ? 'border-red-500/50 bg-slate-900 shadow-[0_0_15px_-3px_rgba(239,68,68,0.15)]' 
       : 'border-emerald-500/50 bg-slate-800';
 
   const typeColorMap: Record<string, string> = {
@@ -26,7 +31,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleStatus, onDelete }) =
   };
 
   return (
-    <div className={`group relative flex items-start p-4 rounded-xl border transition-all duration-300 hover:shadow-lg ${statusColor}`}>
+    <div className={`group relative flex items-start p-4 rounded-xl border transition-all duration-300 hover:shadow-lg ${statusClasses}`}>
       <button 
         onClick={() => onToggleStatus(task.id)}
         className="mt-1 mr-4 text-slate-400 hover:text-emerald-400 transition-colors focus:outline-none"
@@ -49,14 +54,32 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onToggleStatus, onDelete }) =
         </div>
         
         <div className="flex items-center mt-2 space-x-4 text-sm text-slate-400">
-          <div className="flex items-center">
-            <Calendar className="w-4 h-4 mr-1.5 opacity-70" />
-            <span className={task.color === 'red' && !isDone ? 'text-red-400 font-medium' : ''}>
+          <div className={`relative flex items-center group/date ${task.type !== 'daily' ? 'cursor-pointer hover:text-slate-200' : ''}`}>
+            <Calendar className={`w-4 h-4 mr-1.5 opacity-70 ${isOverdue ? 'text-red-400' : ''}`} />
+            
+            <span className={isOverdue ? 'text-red-400 font-medium' : ''}>
               {task.due_date}
             </span>
+
+            {/* Date Picker Input - Only for non-daily tasks */}
+            {task.type !== 'daily' && !isDone && (
+              <input 
+                type="date"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10"
+                value={task.due_date}
+                onChange={(e) => onDateChange(task.id, e.target.value)}
+              />
+            )}
+            
+            {task.type !== 'daily' && !isDone && (
+              <span className="ml-1.5 text-[10px] bg-slate-700 px-1 rounded opacity-0 group-hover/date:opacity-100 transition-opacity">
+                Edit
+              </span>
+            )}
           </div>
-          {task.color === 'red' && !isDone && (
-            <div className="flex items-center text-red-400 text-xs font-medium bg-red-400/10 px-2 py-0.5 rounded">
+
+          {isOverdue && (
+            <div className="flex items-center text-red-400 text-xs font-medium bg-red-400/10 px-2 py-0.5 rounded animate-pulse">
               Overdue
             </div>
           )}
