@@ -283,19 +283,40 @@ const App: React.FC = () => {
     return true;
   }).sort((a, b) => {
     const today = getLocalISODate();
+    
+    // 1. Pending tasks always before Done tasks
     if (a.status !== b.status) return a.status === TaskStatus.PENDING ? -1 : 1;
+    
+    // 2. Done tasks: Sort by date descending
     if (a.status === TaskStatus.DONE) return b.due_date.localeCompare(a.due_date);
 
+    // Common Priority calculation
+    const priorityWeight: Record<TaskPriority, number> = { high: 3, medium: 2, low: 1 };
+    const pA = priorityWeight[a.priority || 'medium'];
+    const pB = priorityWeight[b.priority || 'medium'];
+
+    // 3. Special Logic for One-Time Tasks: Priority > Due Date
+    // If we are comparing two One-Time tasks (e.g. in One-Time view),
+    // we strictly follow Priority > Date, ignoring the "Overdue" grouping.
+    const isOneTimeComparison = a.type === TaskType.ONETIME && b.type === TaskType.ONETIME;
+
+    if (isOneTimeComparison) {
+      if (pA !== pB) return pB - pA; // High priority first
+      return a.due_date.localeCompare(b.due_date); // Earliest date next
+    }
+
+    // 4. Default Logic (Daily, Weekly, Monthly, or Mixed types)
+    
+    // Overdue items check
     const aOverdue = a.due_date < today;
     const bOverdue = b.due_date < today;
     if (aOverdue && !bOverdue) return -1;
     if (!aOverdue && bOverdue) return 1;
 
-    const priorityWeight: Record<TaskPriority, number> = { high: 3, medium: 2, low: 1 };
-    const pA = priorityWeight[a.priority || 'medium'];
-    const pB = priorityWeight[b.priority || 'medium'];
+    // Priority
     if (pA !== pB) return pB - pA;
 
+    // Due Date
     return a.due_date.localeCompare(b.due_date);
   });
 
