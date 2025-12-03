@@ -23,3 +23,10 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #64748b; 
 }
+
+/* iPhone Safe Area adjustments */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

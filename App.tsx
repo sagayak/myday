@@ -173,7 +173,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 pb-32 pt-6">
+      <main className="max-w-3xl mx-auto px-4 pb-36 pt-6">
         
         {/* Error Notification */}
         {errorMsg && (
@@ -260,7 +260,7 @@ const App: React.FC = () => {
       </main>
 
       {/* Sticky Input Area */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent pt-12">
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent pt-12 pb-safe z-50">
         <div className="max-w-3xl mx-auto">
           <form 
             onSubmit={handleCommandSubmit}
