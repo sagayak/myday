@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TaskType, TaskStatus, TaskPriority } from './types';
-import { processUserCommand } from './services/geminiService';
 import { storageService } from './services/storageService';
 import TaskCard from './components/TaskCard';
 import EmptyState from './components/EmptyState';
 import { TASK_TYPES } from './constants';
-import { Send, Loader2, Sparkles, AlertCircle, Bell, BellOff, RefreshCw, Database, RotateCcw } from 'lucide-react';
+import { Loader2, Sparkles, AlertCircle, Bell, BellOff, RefreshCw, Database, RotateCcw, Plus, Calendar, Flag, List } from 'lucide-react';
 
 // Helper to get local YYYY-MM-DD string to avoid timezone issues with UTC
 const getLocalISODate = () => {
@@ -75,8 +74,13 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Manual Input State
   const [inputValue, setInputValue] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [newTaskType, setNewTaskType] = useState<TaskType>(TaskType.ONETIME);
+  const [newTaskPriority, setNewTaskPriority] = useState<TaskPriority>('medium');
+  const [newTaskDate, setNewTaskDate] = useState(getLocalISODate());
+
   const [activeFilter, setActiveFilter] = useState<{ type?: TaskType, status?: string } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -89,6 +93,15 @@ const App: React.FC = () => {
       setNotificationsEnabled(Notification.permission === 'granted');
     }
   }, []);
+
+  // Update default task type when filter changes
+  useEffect(() => {
+    if (activeFilter?.type) {
+      setNewTaskType(activeFilter.type);
+    } else {
+      setNewTaskType(TaskType.ONETIME);
+    }
+  }, [activeFilter]);
 
   // INITIAL LOAD FROM GOOGLE SHEETS
   const initData = async () => {
@@ -157,7 +170,7 @@ const App: React.FC = () => {
         ? `Priority: ${dueTasks[0].priority || 'medium'}`
         : dueTasks.map(t => t.title).join(', ');
 
-      new Notification("TaskMind AI", {
+      new Notification("TaskMind", {
         body: body,
         icon: '/manifest-icon-192.maskable.png'
       });
@@ -175,58 +188,25 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCommandSubmit = async (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
 
-    const command = inputValue;
+    const newTask: Task = {
+      id: crypto.randomUUID(),
+      title: inputValue.trim(),
+      type: newTaskType,
+      status: TaskStatus.PENDING,
+      due_date: newTaskDate,
+      priority: newTaskPriority,
+      color: newTaskDate < getLocalISODate() ? 'red' : 'green',
+      subtasks: []
+    };
+
+    setTasks(prev => [...prev, newTask]);
     setInputValue('');
-    setLoading(true);
-    setErrorMsg(null);
-
-    try {
-      const response = await processUserCommand(command, tasks, activeFilter?.type);
-
-      if (response.error) {
-        setErrorMsg(response.error);
-        return;
-      }
-
-      switch (response.db_action) {
-        case 'create':
-          if (response.task) {
-            let newTask = response.task;
-            const today = getLocalISODate();
-            if (newTask.type === TaskType.DAILY) {
-                newTask = { ...newTask, due_date: today, status: TaskStatus.PENDING, color: 'green' };
-            }
-            if (!newTask.priority) newTask.priority = 'medium';
-            setTasks(prev => [...prev, newTask]);
-          }
-          break;
-        case 'update':
-          if (response.task) {
-            setTasks(prev => prev.map(t => t.id === response.task!.id ? response.task! : t));
-          }
-          break;
-        case 'delete':
-          if (response.task_id) {
-            setTasks(prev => prev.filter(t => t.id !== response.task_id));
-          }
-          break;
-        case 'query':
-          if (response.filters) {
-            setActiveFilter(response.filters);
-          } else {
-            setActiveFilter(null);
-          }
-          break;
-      }
-    } catch (err) {
-      setErrorMsg("Something went wrong processing your request.");
-    } finally {
-      setLoading(false);
-    }
+    // Reset defaults after add? Maybe keep them for rapid entry.
+    // Let's just reset title.
   };
 
   const handleToggleStatus = (id: string) => {
@@ -331,9 +311,8 @@ const App: React.FC = () => {
   });
 
   const getPlaceholder = () => {
-    if (loading) return "Thinking...";
     if (activeFilter?.type) return `Add a ${activeFilter.type} task...`;
-    return "Add a task (e.g., 'Urgent buy milk')";
+    return "What needs to be done?";
   };
 
   return (
@@ -344,7 +323,7 @@ const App: React.FC = () => {
             <div className="bg-gradient-to-tr from-purple-500 to-blue-500 p-2 rounded-lg shadow-lg shadow-purple-500/20">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">TaskMind AI</h1>
+            <h1 className="text-xl font-bold tracking-tight text-white">TaskMind</h1>
           </div>
           
           <div className="flex items-center space-x-4">
@@ -372,7 +351,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 pb-36 pt-6">
+      <main className="max-w-3xl mx-auto px-4 pb-48 pt-6">
         {errorMsg && (
           <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col sm:flex-row items-center gap-3 text-red-400 animate-in fade-in">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -443,29 +422,72 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-900 via-slate-900 to-transparent pt-12 pb-safe z-50">
+      {/* FIXED BOTTOM INPUT SECTION - MANUAL ENTRY */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-slate-900/95 backdrop-blur-xl border-t border-slate-800 z-50 pb-safe">
         <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleCommandSubmit} className="relative group">
-            <div className={`absolute -inset-0.5 bg-gradient-to-r from-purple-500 to-blue-500 rounded-2xl opacity-75 group-hover:opacity-100 transition duration-500 blur ${loading ? 'animate-pulse' : ''}`}></div>
-            <div className="relative flex items-center bg-slate-900 rounded-xl p-1">
+          <form onSubmit={handleManualSubmit} className="flex flex-col gap-3">
+             {/* Row 1: Title Input */}
+            <div className="relative flex items-center bg-slate-800 rounded-xl px-4 border border-slate-700 focus-within:border-purple-500/50 transition-colors">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder={getPlaceholder()}
-                className="w-full bg-transparent text-slate-100 px-4 py-3.5 outline-none placeholder:text-slate-500"
-                disabled={loading}
+                className="w-full bg-transparent text-slate-100 py-3.5 outline-none placeholder:text-slate-500 text-lg"
               />
               <button 
                 type="submit"
-                disabled={loading || !inputValue.trim()}
-                className="p-2.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors disabled:opacity-50"
+                disabled={!inputValue.trim()}
+                className="ml-2 p-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:bg-slate-700"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                <Plus className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Row 2: Controls (Type, Priority, Date) */}
+            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+               <div className="flex items-center gap-2">
+                 {/* Type Selector */}
+                 <div className="relative group">
+                    <select 
+                      value={newTaskType}
+                      onChange={(e) => setNewTaskType(e.target.value as TaskType)}
+                      className="appearance-none bg-slate-800 text-xs font-semibold text-slate-300 py-2 pl-8 pr-4 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-600 focus:outline-none"
+                    >
+                      {TASK_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                    <List className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                 </div>
+
+                 {/* Priority Selector */}
+                 <div className="relative group">
+                    <select 
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value as TaskPriority)}
+                      className={`appearance-none bg-slate-800 text-xs font-semibold py-2 pl-8 pr-4 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-600 focus:outline-none uppercase ${
+                        newTaskPriority === 'high' ? 'text-red-400' : newTaskPriority === 'medium' ? 'text-amber-400' : 'text-blue-400'
+                      }`}
+                    >
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                    <Flag className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                 </div>
+
+                 {/* Date Selector */}
+                 <div className="relative group">
+                    <input 
+                      type="date"
+                      value={newTaskDate}
+                      onChange={(e) => setNewTaskDate(e.target.value)}
+                      className="bg-slate-800 text-xs font-semibold text-slate-300 py-1.5 pl-8 pr-2 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-600 focus:outline-none h-[34px]"
+                    />
+                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                 </div>
+               </div>
+            </div>
           </form>
-          <p className="text-center text-xs text-slate-600 mt-3 font-mono">Powered by Gemini 2.5 Flash</p>
         </div>
       </div>
     </div>

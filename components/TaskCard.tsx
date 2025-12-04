@@ -84,25 +84,30 @@ const TaskCard: React.FC<TaskCardProps> = ({
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className={`text-lg font-medium truncate pr-2 ${isDone ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
+          <div className="flex items-start justify-between gap-3">
+            {/* Title - Removed truncate, added break-words */}
+            <h3 className={`text-lg font-medium break-words whitespace-pre-wrap pr-2 ${isDone ? 'text-slate-500 line-through' : 'text-slate-100'}`}>
               {task.title}
             </h3>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {/* Priority Badge - Click to cycle */}
-              {!isDone && (
-                <button
-                  onClick={cyclePriority}
-                  className={`flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border uppercase tracking-wider transition-all hover:opacity-80 ${priorityColorMap[task.priority || 'medium']}`}
-                  title="Click to change priority"
-                >
-                   <Flag className="w-3 h-3 mr-1" fill="currentColor" />
-                   {task.priority || 'MED'}
-                </button>
-              )}
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize whitespace-nowrap ${typeColorMap[task.type] || 'text-slate-400'}`}>
-                {task.type}
-              </span>
+            
+            {/* Metadata Badges - Right aligned */}
+            <div className="flex flex-col items-end gap-1.5 flex-shrink-0 mt-1">
+              <div className="flex items-center gap-1.5">
+                {/* Priority Badge - Click to cycle */}
+                {!isDone && (
+                  <button
+                    onClick={cyclePriority}
+                    className={`flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border uppercase tracking-wider transition-all hover:opacity-80 ${priorityColorMap[task.priority || 'medium']}`}
+                    title="Click to change priority"
+                  >
+                     <Flag className="w-3 h-3 mr-1" fill="currentColor" />
+                     {task.priority || 'MED'}
+                  </button>
+                )}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize whitespace-nowrap ${typeColorMap[task.type] || 'text-slate-400'}`}>
+                  {task.type}
+                </span>
+              </div>
             </div>
           </div>
           
@@ -152,7 +157,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 
         <button 
           onClick={() => onDelete(task.id)}
-          className="ml-2 p-1.5 rounded-lg text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 transition-all focus:opacity-100"
+          className="ml-2 p-1.5 rounded-lg text-slate-500 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 transition-all focus:opacity-100 self-start mt-1"
           aria-label="Delete task"
         >
           <Trash2 className="w-4 h-4" />
@@ -175,7 +180,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                    <Circle className="w-4 h-4" />
                 )}
              </button>
-             <span className={`text-sm ${subtask.isCompleted ? 'text-slate-600 line-through' : 'text-slate-300'}`}>
+             <span className={`text-sm break-words flex-1 ${subtask.isCompleted ? 'text-slate-600 line-through' : 'text-slate-300'}`}>
                {subtask.title}
              </span>
           </div>
@@ -184,7 +189,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
         {/* Add Subtask Input */}
         {showSubtaskInput ? (
           <form onSubmit={handleSubtaskSubmit} className="mt-2 flex items-center">
-            <Circle className="w-4 h-4 text-slate-600 mr-3 dashed" />
+            <Circle className="w-4 h-4 text-slate-600 mr-3 dashed flex-shrink-0" />
             <input
               type="text"
               autoFocus
