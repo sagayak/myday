@@ -27,11 +27,26 @@ function doGet(e) {
         subtasks = row[6] ? JSON.parse(row[6]) : [];
       } catch (e) { subtasks = []; }
 
+      // STRICT DATE SANITIZATION
+      // Google Sheets often returns Date objects for date cells.
+      // We must format them strictly to YYYY-MM-DD.
+      let rawDate = row[3];
+      let cleanDate = "";
+      
+      if (Object.prototype.toString.call(rawDate) === '[object Date]') {
+        // It's a real Date object, format it using Apps Script Utilities
+        // Use the script's timezone (usually matches the sheet)
+        cleanDate = Utilities.formatDate(rawDate, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      } else {
+        // It's a string, just take the first 10 chars (YYYY-MM-DD)
+        cleanDate = String(rawDate).substring(0, 10);
+      }
+
       tasks.push({
         id: String(row[0]),
         title: String(row[1]),
         type: String(row[2]),
-        due_date: String(row[3]),
+        due_date: cleanDate,
         status: String(row[4]),
         priority: String(row[5] || 'medium'),
         subtasks: subtasks,
@@ -84,7 +99,8 @@ function doPost(e) {
           t.id,
           t.title,
           t.type,
-          t.due_date,
+          // Ensure we only save YYYY-MM-DD back to the sheet too
+          (t.due_date || "").substring(0, 10),
           t.status,
           t.priority || 'medium',
           JSON.stringify(t.subtasks || [])

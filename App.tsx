@@ -116,9 +116,17 @@ const App: React.FC = () => {
     
     try {
       const serverTasks = await storageService.loadTasks();
+
+      // CLIENT-SIDE SANITIZATION:
+      // Immediately strip any time/milliseconds from the due_date coming from the server.
+      // This ensures the rest of the app only ever deals with "YYYY-MM-DD".
+      const sanitizedTasks = serverTasks.map(t => ({
+        ...t,
+        due_date: (t.due_date || getLocalISODate()).substring(0, 10) 
+      }));
       
       // Run recurring logic on the fresh data
-      const processedTasks = checkAndResetRecurringTasks(serverTasks);
+      const processedTasks = checkAndResetRecurringTasks(sanitizedTasks);
       
       setTasks(processedTasks);
       setIsHydrated(true); // Only hydrate on success!
